@@ -1,5 +1,5 @@
-.global print
+extern printf
+
+global print
 print:
-    call printf
-    
-    ret
+    jmp printf
