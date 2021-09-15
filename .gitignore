@@ -1,0 +1,3 @@
+# dont commit build files. no seriously. Dont.
+/build/*
+/ush
