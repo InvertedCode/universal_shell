@@ -13,6 +13,11 @@ struct ssh_packet {
 	char *data;
 };
 
+struct name_list {
+	int    items;
+	char **data;
+};
+
 #define SSH_FD 0
 int main(int argc, char** argv) {
 	// this is currently compiled in, but once it actually works that will change uwu
@@ -68,12 +73,24 @@ int main(int argc, char** argv) {
 			payload = malloc(packet_length - padding_length - 1);
 			padding = malloc(padding_length);
 
+			
 			read(ssh_sock, payload, packet_length - padding_length - 1);
 			read(ssh_sock, padding, padding_length);
 
 			printf("PACKET LENGTH:  %u\n", packet_length);
 			printf("PADDING LENGTH: %u\n", padding_length);
-			
+			printf("==== BEGIN PAYLOAD ====\n");
+			for (int i = 0; i < (packet_length - padding_length - 1); i++) printf("%c", payload[i]);
+			printf("\n===== END PAYLOAD =====\n");
+
+			uint8_t type = payload[0];
+
+			printf("TYPE %i\n", type);
+
+			if (type == 20) { // KEX_KEXINIT
+
+			}
 		}
 	}
 }
+
