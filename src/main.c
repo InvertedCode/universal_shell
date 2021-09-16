@@ -8,15 +8,48 @@
 #include <poll.h>
 #include <stdint.h>
 
-struct ssh_packet {
+struct bounded {
 	int   length;
-	char *data;
+	int   newpos;
+	void *data;
 };
+typedef struct bounded bounded_t;
 
-struct name_list {
-	int    items;
-	char **data;
-};
+bounded_t *read_namelist(char *at) {
+	bounded_t  *l     = malloc(sizeof(bounded_t));
+	char      **names = malloc(256);
+	uint32_t    len   = 0;
+
+	memcpy(&len, at, 4);
+	len = ntohl(len);
+
+	int slen  = 0;
+	int start = 4;
+
+	int length = 1;
+	
+	for (int i = 3; i < len; i++) {
+		if (at[i] == ',') {
+			slen--;
+			char *str = malloc(slen + 1);
+			memcpy(str, at + i - slen, slen);
+			names[length-1] = str;
+			length++;
+			slen = 0;
+			start = i;
+		}
+		slen++;
+	}
+
+	char *str = malloc(slen);
+	memcpy(str, at + start, slen);
+	names[length] = str;
+
+	l->length = length;
+	l->data   = names;
+	l->newpos = len+4;
+	return l;
+}
 
 #define SSH_FD 0
 int main(int argc, char** argv) {
@@ -88,9 +121,37 @@ int main(int argc, char** argv) {
 			printf("TYPE %i\n", type);
 
 			if (type == 20) { // KEX_KEXINIT
+				uint8_t *cookie = malloc(16);
+				
+				memcpy(cookie, payload + 1, 16);
 
+				int pos = 17;
+
+				bounded_t *kex_algorithms = read_namelist(payload + pos);
+				pos += kex_algorithms->newpos;
+				bounded_t *server_host_key_algorithms = read_namelist(payload + pos);
+				pos += server_host_key_algorithms->newpos;
+				bounded_t *encryption_algorithms_client_to_server = read_namelist(payload + pos);
+				pos += encryption_algorithms_client_to_server->newpos;
+				bounded_t *encryption_algorithms_server_to_client = read_namelist(payload + pos);
+				pos += encryption_algorithms_server_to_client->newpos;
+				bounded_t *mac_algorithms_client_to_server = read_namelist(payload + pos);
+				pos += mac_algorithms_client_to_server->newpos;
+				bounded_t *mac_algorithms_server_to_client = read_namelist(payload + pos);
+				pos += mac_algorithms_server_to_client->newpos;
+				bounded_t *compression_algorithms_client_to_server = read_namelist(payload + pos);
+				pos += compression_algorithms_client_to_server->newpos;
+				bounded_t *compression_algorithms_server_to_client = read_namelist(payload + pos);
+				pos += compression_algorithms_server_to_client->newpos;
+				bounded_t *languages_client_to_server = read_namelist(payload + pos);
+				pos += languages_client_to_server->newpos;
+				bounded_t *languages_server_to_client = read_namelist(payload + pos);
+				pos += languages_server_to_client->newpos;
+
+//				for (int i = 0; i < kex_algorithms->length; i++) {
+//					printf("%s\n", ((char **)kex_algorithms->data)[i]);
+//				}
 			}
 		}
 	}
 }
-
