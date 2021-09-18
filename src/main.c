@@ -15,6 +15,40 @@ struct bounded {
 };
 typedef struct bounded bounded_t;
 
+#define LIST_END "\xFF\xFF\xFF\xFF"
+
+const char *kex_ke[2] = { // key exchange
+	"none", LIST_END
+};
+const char *kex_hk[2] = { // server host key
+	"none", LIST_END
+};
+const char *kex_se[2] = { // serverbound encryption
+	"none", LIST_END
+};
+const char *kex_ce[2] = { // clientbound encryption
+	"none", LIST_END
+};
+const char *kex_sm[2] = { // serverbound mac
+	"none", LIST_END
+};
+const char *kex_cm[2] = { // clientbound mac
+	"none", LIST_END
+};
+const char *kex_sc[2] = { // serverbound compression
+	"none", LIST_END
+};
+const char *kex_cc[2] = { // clientbound compression
+	"none", LIST_END
+};
+const char *kex_sl[2] = { // serverbound languages
+	"none", LIST_END
+};
+const char *kex_cl[2] = { // clientbound languages
+	"none", LIST_END
+};
+const void *kex_al[10] = {&kex_ke, &kex_hk, &kex_se, &kex_ce, &kex_sm, &kex_cm, &kex_sc, &kex_sc, &kex_sl, &kex_cl};
+
 bounded_t *read_namelist(char *at) {
 	bounded_t  *l     = malloc(sizeof(bounded_t));
 	char      **names = malloc(256);
@@ -49,6 +83,29 @@ bounded_t *read_namelist(char *at) {
 	l->data   = names;
 	l->newpos = len+4;
 	return l;
+}
+
+void *encode_namelist(char **data, int length) {
+	void *list    = malloc(3 + length); // 4 bytes for the length and some bytes for the commas
+	int   datalen = 3 + length;
+
+	for (int i = 0; i < length; i++) {
+
+	}
+
+	bounded_t *encoded = malloc(sizeof(bounded_t));
+	encoded->length = datalen;
+	encoded->data   = list;
+	return list;
+}
+
+void send_ssh_packet(int fd, uint8_t *data, int data_length, int cipher_block_size) {
+	uint8_t *packet = malloc(4);
+
+	uint8_t  padding_length = ((8 < cipher_block_size) ? cipher_block_size : 8) - ((5 + data_length) % ((8 < cipher_block_size) ? cipher_block_size : 8));
+	uint32_t packet_length = 4 + padding_length + data_length;
+	printf("PADDING_LENGTH %i\n", padding_length);
+	printf("PACKET_LENGTH  %i\n", packet_length);
 }
 
 #define SSH_FD 0
@@ -120,7 +177,7 @@ int main(int argc, char** argv) {
 
 			printf("TYPE %i\n", type);
 
-			if (type == 20) { // KEX_KEXINIT
+			if (type == 20) { // MSG_KEXINIT
 				uint8_t *cookie = malloc(16);
 				
 				memcpy(cookie, payload + 1, 16);
@@ -151,7 +208,40 @@ int main(int argc, char** argv) {
 				for (int i = 0; i < kex_algorithms->length; i++) {
 					printf("%i: ", i);
 					printf("%s\n", ((char **)kex_algorithms->data)[i]);
+				};
+
+				int   res_length = 24;
+				void *res       = malloc(res_length);
+     
+				for (int i = 0; i < 10; i++) {
+					int ii = 0;
+					int lo = 0; // the offset of the length
+
+					res_length += 4;
+					res = realloc(res, res_length);
+					memset(res + res_length - 4, 0, 4);
+
+					while (strcmp(((char***)kex_al)[i][ii], LIST_END) != 0) {
+						res_length += strlen(((char***)kex_al)[i][ii]) + 1;
+						res         = realloc(res, res_length);
+						
+						memset(res + res_length - 1, ',', 1);
+						memset(res + lo - 1, htonl(ntohl(((uint32_t *)res+lo-1)[0]) + strlen(((char***)kex_al)[i][ii])), 4);
+						memcpy(res + res_length - 1 - strlen(((char***)kex_al)[i][ii]), (((char***)kex_al)[i][ii]), strlen(((char***)kex_al)[i][ii]));
+						//printf("(len %i) (newthing %s)\n", res_length, ((char***)kex_al)[i][ii]);
+						ii++;
+					}
+
+					if (ii) {
+						res_length--;
+						memset(res + res_length, 0, 1);
+						res = realloc(res, res_length);
+					}
 				}
+				
+//				printf("\n");
+//				for (int i = 0; i < res_length; i++) printf("%c ", ((char*)res)[i]);
+//				printf("\n");
 			}
 		}
 	}
