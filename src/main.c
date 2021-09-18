@@ -41,9 +41,9 @@ bounded_t *read_namelist(char *at) {
 		slen++;
 	}
 
-	char *str = malloc(slen);
-	memcpy(str, at + start, slen);
-	names[length] = str;
+	char *str = malloc(slen + 5);
+	memcpy(str, at + start + 1, slen + 3);
+	names[length-1] = str;
 
 	l->length = length;
 	l->data   = names;
@@ -148,9 +148,10 @@ int main(int argc, char** argv) {
 				bounded_t *languages_server_to_client = read_namelist(payload + pos);
 				pos += languages_server_to_client->newpos;
 
-//				for (int i = 0; i < kex_algorithms->length; i++) {
-//					printf("%s\n", ((char **)kex_algorithms->data)[i]);
-//				}
+				for (int i = 0; i < kex_algorithms->length; i++) {
+					printf("%i: ", i);
+					printf("%s\n", ((char **)kex_algorithms->data)[i]);
+				}
 			}
 		}
 	}
