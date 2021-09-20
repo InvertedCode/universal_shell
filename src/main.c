@@ -100,19 +100,27 @@ void *encode_namelist(char **data, int length) {
 }
 
 void send_ssh_packet(int fd, uint8_t *data, int data_length, int cipher_block_size) {
-	uint8_t *packet = malloc(4);
+	void *packet = malloc(4);
 
-	uint8_t  padding_length = ((8 < cipher_block_size) ? cipher_block_size : 8) - ((5 + data_length) % ((8 < cipher_block_size) ? cipher_block_size : 8));
-	uint32_t packet_length = 4 + padding_length + data_length;
+	uint8_t  padding_length = 8 + ((8 < cipher_block_size) ? cipher_block_size : 8) - ((5 + data_length) % ((8 < cipher_block_size) ? cipher_block_size : 8));
+	uint32_t packet_length = htonl(1 + padding_length + data_length);
 	printf("PADDING_LENGTH %i\n", padding_length);
 	printf("PACKET_LENGTH  %i\n", packet_length);
+
+	packet = realloc(packet, packet_length+4);
+
+	memcpy(packet, &packet_length, 4);
+	memcpy(packet+4, &padding_length, 1);
+	memcpy(packet+5, data, data_length);
+
+	write(fd, packet, packet_length+4);
 }
 
 #define SSH_FD 0
 int main(int argc, char** argv) {
 	// this is currently compiled in, but once it actually works that will change uwu
 	char *ssh_host = "127.0.0.1";
-	int   ssh_port = 22;
+	int   ssh_port = 2222;
 
 	// some other vars
 	int ssh_sock;
@@ -210,12 +218,13 @@ int main(int argc, char** argv) {
 					printf("%s\n", ((char **)kex_algorithms->data)[i]);
 				};
 
-				int   res_length = 24;
+				int   res_length = 17;
 				void *res       = malloc(res_length);
      
 				for (int i = 0; i < 10; i++) {
 					int ii = 0;
-					int lo = 0; // the offset of the length
+					int lo = res_length; // the offset of the length
+					int len = 0;
 
 					res_length += 4;
 					res = realloc(res, res_length);
@@ -224,9 +233,10 @@ int main(int argc, char** argv) {
 					while (strcmp(((char***)kex_al)[i][ii], LIST_END) != 0) {
 						res_length += strlen(((char***)kex_al)[i][ii]) + 1;
 						res         = realloc(res, res_length);
-						
+
+						len += strlen(((char***)kex_al)[i][ii]) + 1;
+
 						memset(res + res_length - 1, ',', 1);
-						memset(res + lo - 1, htonl(ntohl(((uint32_t *)res+lo-1)[0]) + strlen(((char***)kex_al)[i][ii])), 4);
 						memcpy(res + res_length - 1 - strlen(((char***)kex_al)[i][ii]), (((char***)kex_al)[i][ii]), strlen(((char***)kex_al)[i][ii]));
 						//printf("(len %i) (newthing %s)\n", res_length, ((char***)kex_al)[i][ii]);
 						ii++;
@@ -234,14 +244,29 @@ int main(int argc, char** argv) {
 
 					if (ii) {
 						res_length--;
+						len--;
+
+						len = htonl(len);
+
+						memcpy(res + lo, &len, 4);
 						memset(res + res_length, 0, 1);
+
 						res = realloc(res, res_length);
 					}
 				}
-				
-//				printf("\n");
-//				for (int i = 0; i < res_length; i++) printf("%c ", ((char*)res)[i]);
-//				printf("\n");
+
+				((char*)res)[0] = 20;
+
+				res = realloc(res, res_length + 5);
+				((char*)res)[res_length] = 0;
+				memset(res+res_length, 0, 4); // reserved
+				res_length += 5;
+
+				printf("\n");
+				for (int i = 0; i < res_length; i++) printf("%i ", ((char*)res)[i]);
+				printf("\n");
+
+				send_ssh_packet(ssh_sock, res, res_length, 0);
 			}
 		}
 	}

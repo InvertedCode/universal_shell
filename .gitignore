@@ -1,3 +1,4 @@
 # dont commit build files. no seriously. Dont.
 /build/*
 /ush
+/testing_server
