@@ -18,22 +18,22 @@ typedef struct bounded bounded_t;
 #define LIST_END "\xFF\xFF\xFF\xFF"
 
 const char *kex_ke[2] = { // key exchange
-	"none", LIST_END
+	"diffie-hellman-group1-sha1", LIST_END // NYI
 };
 const char *kex_hk[2] = { // server host key
-	"none", LIST_END
+	"ssh-dss", LIST_END // NYI
 };
 const char *kex_se[2] = { // serverbound encryption
-	"none", LIST_END
+	"3des-cbc", LIST_END // NYI
 };
 const char *kex_ce[2] = { // clientbound encryption
-	"none", LIST_END
+	"3des-cbc", LIST_END // NYI
 };
 const char *kex_sm[2] = { // serverbound mac
-	"none", LIST_END
+	"hmac-sha1", LIST_END // NYI
 };
 const char *kex_cm[2] = { // clientbound mac
-	"none", LIST_END
+	"hmac-sha1", LIST_END // NYI
 };
 const char *kex_sc[2] = { // serverbound compression
 	"none", LIST_END
@@ -107,13 +107,21 @@ void send_ssh_packet(int fd, uint8_t *data, int data_length, int cipher_block_si
 	printf("PADDING_LENGTH %i\n", padding_length);
 	printf("PACKET_LENGTH  %i\n", packet_length);
 
-	packet = realloc(packet, packet_length+4);
+	packet = realloc(packet, ntohl(packet_length)+4);
 
 	memcpy(packet, &packet_length, 4);
 	memcpy(packet+4, &padding_length, 1);
 	memcpy(packet+5, data, data_length);
 
-	write(fd, packet, packet_length+4);
+
+	send(fd, packet, ntohl(packet_length)+4, 0);
+}
+
+int ssh_read_string(uint8_t *in, char *out) {
+	int len = ntohl(((uint32_t *)in)[0]);
+	printf("STRING LENGTH %i\n", len);
+	memcpy(out, in + 4, len);
+	return len + 4;
 }
 
 #define SSH_FD 0
@@ -262,11 +270,49 @@ int main(int argc, char** argv) {
 				memset(res+res_length, 0, 4); // reserved
 				res_length += 5;
 
-				printf("\n");
-				for (int i = 0; i < res_length; i++) printf("%i ", ((char*)res)[i]);
-				printf("\n");
-
 				send_ssh_packet(ssh_sock, res, res_length, 0);
+
+				uint32_t x = rand();
+				uint32_t g = 2;
+				uint32_t p = 0xFFFFFFFF; // when the
+				uint32_t e = g^x%p;
+
+				res = malloc(9);
+
+				((char*)res)[0] = 30;
+				((char*)res)[1] = 0;
+				((char*)res)[2] = 0;
+				((char*)res)[3] = 0;
+				((char*)res)[4] = 4;
+				((char*)res)[5] = (e & 0x000000FF) << 0;
+				((char*)res)[6] = (e & 0x0000FF00) << 8;
+				((char*)res)[7] = (e & 0x00FF0000) << 16;
+				((char*)res)[8] = (e & 0xFF000000) << 24;
+				
+				send_ssh_packet(ssh_sock, res, 9, 0);
+			} else if (type == 31) {
+				printf("got a response to the kex thing\n");
+				char *data = malloc(1000);
+				int readlen = ssh_read_string(payload+1, data);
+				printf("READ %i\n", readlen);
+				for (int i = 0; i < readlen - 4; i++) printf("%c", data[i]);
+				printf("\n");
+			} else if (type == 21) {
+				uint8_t *res = malloc(1);
+				res[0] = 21;
+				send_ssh_packet(ssh_sock, res, 1, 0);
+
+				res = malloc(100);
+				res[0] = 5;
+				res[1] = 0;
+				res[2] = 0;
+				res[3] = 0;
+				res[4] = 3;
+				res[5] = 's';
+				res[6] = 's';
+				res[7] = 'h';
+
+				send_ssh_packet(ssh_sock, res, 8, 0);
 			}
 		}
 	}
